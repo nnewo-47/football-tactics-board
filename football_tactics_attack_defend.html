@@ -1,0 +1,119 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Football Tactics Studio</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#eef5ff;font:14px system-ui;padding:18px}.app{max-width:1200px;margin:auto}h1{margin:0;font-size:30px}p{color:#a9bad1}.layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,.7fr);gap:14px}.panel{background:#142139;border:1px solid #2a3c56;border-radius:15px;overflow:hidden;margin-top:14px}.head,.tools{padding:12px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-bottom:1px solid #2a3c56}.pitchwrap{padding:10px;background:#0e1828}svg{width:100%;display:block;touch-action:none}.btn{background:#233651;color:#fff;border:1px solid #405572;border-radius:9px;padding:9px 11px;cursor:pointer;font-weight:650}.btn.primary{background:#c7f36b;color:#17210b;border-color:#c7f36b}.section{padding:14px}.small{font-size:12px;color:#a9bad1}.row{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}.frame{min-width:112px;text-align:left}.frame.selected{border-color:#c7f36b;box-shadow:inset 0 0 0 1px #c7f36b}.frame-actions{display:flex;gap:4px;margin-top:7px}.frame-actions button{font-size:11px;padding:5px 7px}.field{display:block;margin:12px 0;color:#a9bad1}.field input,.field textarea{display:block;width:100%;margin-top:5px;padding:9px;border-radius:8px;border:1px solid #405572;background:#0b1525;color:#fff}.roles div{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #2a3c56}.status{color:#c7f36b;font-size:12px;min-height:18px}@media(max-width:800px){.layout{grid-template-columns:1fr}body{padding:10px}}
+</style></head><body><div class="app"><h1>TACTICS <span style="color:#c7f36b">STUDIO</span></h1><p>Drag players to customize each shape. Click ATTACK or DEFEND and the team will automatically move into that formation.</p><div class="layout"><section class="panel"><div class="head"><b id="phase">IN POSSESSION · 3-1-2-2-2</b><div class="row"><button class="btn primary" id="ip">⚽ ATTACK · 3-1-2-2-2</button><button class="btn" id="oop">🛡 DEFEND · 4-1-3-2</button></div></div><div class="pitchwrap"><svg id="pitch" viewBox="0 0 800 620"><defs><pattern id="grass" width="160" height="560" patternUnits="userSpaceOnUse"><rect width="80" height="560" fill="#176344"/><rect x="80" width="80" height="560" fill="#1b6d4b"/></pattern><marker id="arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="#fff"/></marker></defs><rect x="12" y="12" width="776" height="596" rx="4" fill="url(#grass)" stroke="#e0f5e4" stroke-width="2"/><path d="M12 310H788 M220 12H580V102H220Z M300 12H500V46H300Z M220 518H580V608H220Z M300 574H500V608H300Z" fill="none" stroke="#e0f5e4" stroke-width="2"/><circle cx="400" cy="310" r="72" fill="none" stroke="#e0f5e4" stroke-width="2"/><circle cx="400" cy="310" r="3" fill="#fff"/><g id="arrows"></g><g id="tokens"></g></svg></div><div class="tools"><button class="btn" id="reset">↺ Reset current formation</button><label class="small">Transition speed <input id="speed" type="range" min=".4" max="2" step=".1" value="1"></label></div><div class="section"><div class="small">Switch between attack and defend any time. Move players while a formation is selected to customize it; each shape remembers its own positions.</div><div id="status" class="status"></div></div></section><aside><section class="panel"><div class="head"><b>Selected player</b><span id="number" class="small">None</span></div><div class="section"><b id="name">Click a player</b><p id="role" class="small">Select a token on the pitch to rename or move it.</p><label class="field">Player label<input id="label" placeholder="e.g. RCB, Pivot, ST-L"></label><div class="row"><button class="btn" id="left">←</button><button class="btn" id="up">↑</button><button class="btn" id="down">↓</button><button class="btn" id="right">→</button></div></div></section><section class="panel"><div class="head"><b>Shape notes</b><span id="formation" class="small">3-1-2-2-2</span></div><div class="section"><p id="description">Three defenders, one pivot, two central midfielders, two advanced midfielders and two strikers.</p><div id="roles" class="roles"></div><label class="field">Coach's notes<textarea id="notes" rows="4" placeholder="Pressing triggers, rotations, runs..."></textarea></label><button class="btn" id="export">Export board data (.json)</button></div></section></aside></div><p class="small">Local interactive prototype. The initial player positions are illustrative; adapt them to your actual team.</p></div>
+<script>
+const $=id=>document.getElementById(id),S='http://www.w3.org/2000/svg';
+const ip={1:[400,575],2:[260,450],3:[400,468],4:[540,450],5:[400,370],6:[325,300],7:[475,300],8:[285,205],9:[515,205],10:[350,115],11:[450,115]};
+const oop={1:[400,575],2:[225,455],3:[340,470],4:[460,470],5:[575,455],6:[400,385],7:[270,295],8:[400,280],9:[530,295],10:[350,175],11:[450,175]};
+const roles={1:'Goalkeeper',2:'Left centre-back / left back',3:'Centre-back',4:'Right centre-back / right back',5:'Single pivot / holding midfielder',6:'Left central midfielder',7:'Right central midfielder',8:'Left advanced midfielder / wide midfielder',9:'Right advanced midfielder / wide midfielder',10:'Left striker',11:'Right striker'};
+let phase='ip',selected=5,drag=null,playing=false,raf=0;
+let shapes={ip:structuredClone(ip),oop:structuredClone(oop)};
+let ps=Object.keys(ip).map(n=>({id:+n,x:ip[n][0],y:ip[n][1],label:+n===1?'GK':({2:'LCB',3:'CB',4:'RCB',5:'DM',6:'LCM',7:'RCM',8:'LAM',9:'RAM',10:'ST-L',11:'ST-R'})[n]}));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),svg=(tag,attrs={})=>{let e=document.createElementNS(S,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e};
+function say(t){$('status').textContent=t}
+function render(){
+ $('tokens').innerHTML='';$('arrows').innerHTML='';
+ const target=phase==='ip'?oop:ip;
+ ps.forEach(p=>{
+  if(Math.abs(target[p.id][0]-p.x)+Math.abs(target[p.id][1]-p.y)>20){$('arrows').appendChild(svg('line',{x1:p.x,y1:p.y,x2:target[p.id][0],y2:target[p.id][1],stroke:'#fff','stroke-width':2,'stroke-dasharray':'5 5',opacity:.42,'marker-end':'url(#arrow)'}))}
+  let g=svg('g',{transform:`translate(${p.x} ${p.y})`,style:'cursor:grab'});g.appendChild(svg('circle',{r:20,fill:p.id===selected?'#fff':'#c7f36b',stroke:p.id===selected?'#ffbd69':'#15220a','stroke-width':p.id===selected?4:2}));
+  let t=svg('text',{x:0,y:5,'text-anchor':'middle','font-size':p.id===1?10:13,'font-weight':900,fill:'#15220a'});t.textContent=p.id===1?'GK':p.id;g.appendChild(t);
+  let l=svg('text',{x:0,y:34,'text-anchor':'middle','font-size':12,'font-weight':800,fill:'#fff',stroke:'#123c2b','stroke-width':3,'paint-order':'stroke'});l.textContent=p.label;g.appendChild(l);
+  g.addEventListener('pointerdown',e=>{e.preventDefault();select(p.id);drag=p.id;$('pitch').setPointerCapture(e.pointerId)});$('tokens').appendChild(g);
+ });
+ $('phase').textContent=phase==='ip'?'IN POSSESSION · 3-1-2-2-2':'OUT OF POSSESSION · 4-1-3-2';$('formation').textContent=phase==='ip'?'3-1-2-2-2':'4-1-3-2';
+ $('description').textContent=phase==='ip'?'Three defenders, one pivot, two central midfielders, two advanced midfielders and two strikers.':'Back four, one holding midfielder, three across midfield and two forwards. Stay compact and let the front two guide the press.';
+ $('roles').innerHTML=(phase==='ip'?[['Back line','3'],['Pivot','1'],['Central midfield','2'],['Advanced midfield','2'],['Strikers','2']]:[['Back line','4'],['Holding midfielder','1'],['Midfield line','3'],['Forwards','2']]).map(r=>`<div><b>${r[0]}</b><span>${r[1]} players</span></div>`).join('');
+ $('number').textContent='#'+selected;$('name').textContent=ps.find(p=>p.id===selected).label;$('role').textContent=roles[selected];$('label').value=ps.find(p=>p.id===selected).label;
+}
+function select(id){selected=id;render()}
+$('pitch').addEventListener('pointermove',e=>{if(drag===null||playing)return;let pt=$('pitch').createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;let q=pt.matrixTransform($('pitch').getScreenCTM().inverse()),p=ps.find(p=>p.id===drag);p.x=clamp(q.x,30,770);p.y=clamp(q.y,30,590);shapes[phase][p.id]=[p.x,p.y];render()});
+$('pitch').addEventListener('pointerup',()=>drag=null);$('pitch').addEventListener('pointercancel',()=>drag=null);
+function setPhase(ph){
+ stop();
+ const from=ps.map(p=>({...p})),target=shapes[ph];
+ phase=ph; $('ip').classList.toggle('primary',ph==='ip');$('oop').classList.toggle('primary',ph==='oop');
+ const duration=650/Number($('speed').value);let start=null;
+ function step(now){if(!start)start=now;const t=clamp((now-start)/duration,0,1),e=t*t*(3-2*t);
+ ps.forEach(p=>{const a=from.find(q=>q.id===p.id),b=target[p.id];p.x=a.x+(b[0]-a.x)*e;p.y=a.y+(b[1]-a.y)*e});render();
+ if(t<1){raf=requestAnimationFrame(step)}else{playing=false;raf=0;ps.forEach(p=>{p.x=target[p.id][0];p.y=target[p.id][1]});render();say(ph==='ip'?'Attack shape ready.':'Defensive shape ready.')}}
+ playing=true;raf=requestAnimationFrame(step);
+}
+$('ip').onclick=()=>setPhase('ip');$('oop').onclick=()=>setPhase('oop');
+$('label').oninput=e=>{ps.find(p=>p.id===selected).label=e.target.value.slice(0,12);render()};
+function nudge(dx,dy){let p=ps.find(p=>p.id===selected);p.x=clamp(p.x+dx,30,770);p.y=clamp(p.y+dy,30,590);shapes[phase][p.id]=[p.x,p.y];render()}
+$('left').onclick=()=>nudge(-12,0);$('right').onclick=()=>nudge(12,0);$('up').onclick=()=>nudge(0,-12);$('down').onclick=()=>nudge(0,12);
+function save(){frames.push({id:fid++,name:'Frame '+(frames.length+1),phase,players:ps.map(p=>({...p}))});renderFrames();say('Keyframe saved.')}
+function renderFrames(){
+ $('frames').innerHTML='';
+ frames.forEach((f,index)=>{
+  let wrap=document.createElement('div');
+  wrap.style.cssText='background:#0b1525;border:1px solid '+(f.id===selectedFrameId?'#c7f36b':'#405572')+';border-radius:10px;padding:8px;min-width:130px';
+  let load=document.createElement('button');
+  load.className='btn frame'+(f.id===selectedFrameId?' selected':'');
+  load.style.cssText='width:100%;border:0;padding:3px;background:transparent';
+  load.innerHTML=`<b>${f.name}</b><br><span class="small">${f.phase==='ip'?'In possession':'Out of possession'}</span>`;
+  load.onclick=()=>loadFrame(f.id);
+  let actions=document.createElement('div');actions.className='frame-actions';
+  const up=document.createElement('button');up.className='btn';up.textContent='↑';up.title='Move frame earlier';up.disabled=index===0;up.onclick=()=>moveFrame(index,-1);
+  const down=document.createElement('button');down.className='btn';down.textContent='↓';down.title='Move frame later';down.disabled=index===frames.length-1;down.onclick=()=>moveFrame(index,1);
+  const del=document.createElement('button');del.className='btn';del.textContent='×';del.title='Delete keyframe';del.onclick=()=>deleteFrame(f.id);
+  actions.append(up,down,del);wrap.append(load,actions);$('frames').appendChild(wrap);
+ });
+}
+function loadFrame(id){
+ stop();let f=frames.find(f=>f.id===id);if(!f)return;
+ selectedFrameId=id;phase=f.phase;
+ ps.forEach(p=>{let q=f.players.find(q=>q.id===p.id);if(q)Object.assign(p,q)});
+ render();renderFrames();say('Loaded '+f.name);
+}
+function moveFrame(index,delta){
+ const next=index+delta;if(next<0||next>=frames.length)return;
+ [frames[index],frames[next]]=[frames[next],frames[index]];
+ selectedFrameId=frames[next].id;renderFrames();say('Keyframe order updated.');
+}
+function deleteFrame(id){
+ stop();const idx=frames.findIndex(f=>f.id===id);if(idx<0)return;
+ const wasSelected=selectedFrameId===id;frames.splice(idx,1);
+ if(wasSelected){
+  if(frames.length)loadFrame(frames[Math.min(idx,frames.length-1)].id);
+  else {selectedFrameId=null;renderFrames();say('Keyframe deleted. Save a new frame to continue.');}
+ }else{renderFrames();say('Keyframe deleted.');}
+}
+function save(){
+ const name='Frame '+(frames.length+1);
+ const f={id:fid++,name,phase,players:ps.map(p=>({...p}))};
+ frames.push(f);selectedFrameId=f.id;renderFrames();say('Keyframe saved.');
+}
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=0}
+function animate(){
+ if(frames.length<2){say('Save at least two keyframes first.');return}
+ stop();
+ let startIndex=selectedFrameId?frames.findIndex(f=>f.id===selectedFrameId):0;
+ if(startIndex<0)startIndex=0;
+ if(startIndex>=frames.length-1){say('Select a frame before the final frame to play the transition.');return}
+ playing=true;$('play').textContent='Playing…';
+ let i=startIndex,start=0,a,b,dur;
+ function step(now){
+  if(!playing)return;
+  if(!start){a=frames[i].players;b=frames[i+1].players;start=now;dur=1000/Number($('speed').value)}
+  let t=clamp((now-start)/dur,0,1),e=t*t*(3-2*t);
+  ps.forEach(p=>{let x=a.find(q=>q.id===p.id),y=b.find(q=>q.id===p.id);p.x=x.x+(y.x-x.x)*e;p.y=x.y+(y.y-x.y)*e;p.label=y.label});
+  phase=t<.5?frames[i].phase:frames[i+1].phase;render();
+  if(t>=1){
+   i++;start=0;
+   if(i>=frames.length-1){
+    const finalFrame=frames[frames.length-1];
+    ps.forEach(p=>{const q=finalFrame.players.find(q=>q.id===p.id);if(q)Object.assign(p,q)});
+    phase=finalFrame.phase;selectedFrameId=finalFrame.id;render();renderFrames();stop();say('Animation complete. Reached final keyframe.');return;
+   }
+  }
+  raf=requestAnimationFrame(step)
+ }
+ raf=requestAnimationFrame(step)
+}
+$('reset').onclick=()=>{stop();shapes[phase]=structuredClone(phase==='ip'?ip:oop);ps.forEach(p=>{p.x=shapes[phase][p.id][0];p.y=shapes[phase][p.id][1]});render();say('Current formation reset.')};
+$('export').onclick=()=>{let data={attack:shapes.ip,defend:shapes.oop,notes:$('notes').value};let a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.href=url;a.download='football-tactics.json';a.click();URL.revokeObjectURL(url)};
+render();say('Ready. Click ATTACK or DEFEND to animate the transition.');
+</script></body></html>
