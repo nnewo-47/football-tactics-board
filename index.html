@@ -116,4 +116,4 @@ function animate(){
 $('reset').onclick=()=>{stop();shapes[phase]=structuredClone(phase==='ip'?ip:oop);ps.forEach(p=>{p.x=shapes[phase][p.id][0];p.y=shapes[phase][p.id][1]});render();say('Current formation reset.')};
 $('export').onclick=()=>{let data={attack:shapes.ip,defend:shapes.oop,notes:$('notes').value};let a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.href=url;a.download='football-tactics.json';a.click();URL.revokeObjectURL(url)};
 render();say('Ready. Click ATTACK or DEFEND to animate the transition.');
-</script></body></html>
+</script></body></html> 
